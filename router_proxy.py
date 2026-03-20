@@ -22,9 +22,8 @@ COMPLEX_MODEL = "gemini-3.1-pro-preview"         # 复杂任务模型
 GOOGLE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
 # 监听配置
-# 在 WSL 中运行建议使用 0.0.0.0，以确保 Windows 宿主机能稳定访问。
-# 由于 WSL 处于虚拟网络中，0.0.0.0 不会直接暴露给物理局域网。
-HOST = "0.0.0.0"
+
+HOST = "127.0.0.1"
 PORT = 1234
 # ==========================================
 
@@ -47,12 +46,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def check_complexity(prompt: str) -> bool:
+async def get_complexity_score(prompt: str) -> int:
     """
-    使用 Lite 模型判断复杂度。返回 True 表示复杂，False 表示简单。
+    使用 Lite 模型对用户问题进行复杂度评分。返回 1-100 的分数。
+    70 分以上使用 Pro 模型，0-69 分使用 Flash 模型。
     """
-    if not prompt or len(prompt) < 10:
-        return False # 太短的直接算简单
+    if not prompt:
+        return 30 # 太短的默认低分
 
     try:
         payload = {
@@ -60,11 +60,11 @@ async def check_complexity(prompt: str) -> bool:
             "messages": [
                 {
                     "role": "system", 
-                    "content": "You are a routing assistant. Classify the user's prompt complexity. Reply '0' for simple (greetings, facts, basic code, short translation) or '1' for complex (deep reasoning, architecture, complex debug, creative writing, long-form content). Reply ONLY '0' or '1'."
+                    "content": "You are a routing assistant. Rate the complexity of the user's prompt on a scale of 1-100.\n\nScoring guide:\n- 1-30: Simple greetings, basic facts, yes/no questions, short translations\n- 31-50: Basic code tasks, simple explanations, straightforward requests\n- 51-70: Moderate reasoning, multi-step tasks, detailed explanations\n- 71-90: Complex reasoning, architecture design, complex debugging, creative writing\n- 91-100: Advanced research, system design, long-form content, deep analysis\n\nReply ONLY with a number (1-100)."
                 },
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 1,
+            "max_tokens": 20,
             "temperature": 0.1
         }
         
@@ -80,16 +80,24 @@ async def check_complexity(prompt: str) -> bool:
         
         if response.status_code != 200:
             print(f"Complexity check API error: {response.status_code} - {response.text}")
-            return False
+            return 30
 
         result = response.json()
-        decision = result['choices'][0]['message']['content'].strip()
-        is_complex = decision == "1"
-        print(f"Decision: {'[PRO]' if is_complex else '[FLASH]'} (Lite output: {decision})")
-        return is_complex
+        score_str = result['choices'][0]['message']['content'].strip()
+        # 提取数字
+        score = int(''.join(filter(str.isdigit, score_str)) or '30')
+        score = max(1, min(100, score)) # 限制在 1-100 范围
+        if score >= 70:
+            model_choice = "[PRO]"
+        elif score >= 30:
+            model_choice = "[FLASH]"
+        else:
+            model_choice = "[LITE]"
+        print(f"Decision: {model_choice} | Score: {score}/100 (Lite output: {score_str})")
+        return score
     except Exception as e:
-        print(f"Complexity check failed: {e}, defaulting to Simple model.")
-        return False
+        print(f"Complexity check failed: {e}, defaulting to score 30.")
+        return 30
 
 @app.post("/v1/chat/completions")
 async def proxy_chat(request: Request):
@@ -113,12 +121,17 @@ async def proxy_chat(request: Request):
                 last_user_message = str(content)
             break
 
-    is_complex = await check_complexity(last_user_message)
+    complexity_score = await get_complexity_score(last_user_message)
 
-    # 2. 根据评估结果切换模型
-    target_model = COMPLEX_MODEL if is_complex else SIMPLE_MODEL
+    # 2. 根据评分结果切换模型 (>=70 用 Pro，30-69 用 Flash，<30 用 Lite)
+    if complexity_score >= 70:
+        target_model = COMPLEX_MODEL
+    elif complexity_score >= 30:
+        target_model = SIMPLE_MODEL
+    else:
+        target_model = LITE_MODEL
     body["model"] = target_model
-    print(f"Routing request to: {target_model} | Prompt snippet: {last_user_message[:40]}...")
+    print(f"Routing request to: {target_model} | Score: {complexity_score}/100 | Prompt: \"{last_user_message[:40]}...\"")
 
     # 3. 准备转发请求
     headers = {
