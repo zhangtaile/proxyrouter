@@ -95,8 +95,8 @@ export default {
       return new Response("No contents provided", { status: 400 });
     }
 
-    // 3. 提取最近 1 轮的对话内容作为评估依据
-    const recentContext = contents.slice(-1).map(c => {
+    // 3. 提取最近 2 轮的对话内容作为评估依据 (多轮上下文)
+    const recentContext = contents.slice(-2).map(c => {
       // 过滤掉 thought: true 的 parts，并拼接普通文本
       let text = (c.parts || [])
         .filter(p => !p.thought)
