@@ -38,11 +38,13 @@ export default {
     // 2. 提取 API Key
     const apiKey = request.headers.get("x-goog-api-key") || env.GEMINI_API_KEY;
     if (!apiKey) {
+      console.error("[ERROR] Missing API Key. Check request headers (x-goog-api-key) or env variables.");
       return new Response(JSON.stringify({ error: "Missing API Key" }), { 
         status: 401, 
         headers: { "Content-Type": "application/json" } 
       });
     }
+    console.log(`[DEBUG] API Key identified: ${apiKey.substring(0, 6)}...${apiKey.substring(apiKey.length - 4)}`);
 
     let body;
     try {
@@ -67,17 +69,21 @@ export default {
     }
 
     // 4. 获取复杂度评分
+    console.log(`[DEBUG] Analyzing complexity for prompt: "${lastUserMessage.substring(0, 50)}..."`);
     const score = await getComplexityScore(lastUserMessage, apiKey);
 
     // 5. 模型路由
     let targetModel = LITE_MODEL;
+    let modelLabel = "LITE";
     if (score >= 70) {
       targetModel = COMPLEX_MODEL;
+      modelLabel = "PRO";
     } else if (score >= 30) {
       targetModel = SIMPLE_MODEL;
+      modelLabel = "FLASH";
     }
 
-    console.log(`Routing to: ${targetModel} | Score: ${score} | Prompt: ${lastUserMessage.substring(0, 40)}`);
+    console.log(`[ROUTE] Score: ${score}/100 | Decision: ${modelLabel} (${targetModel})`);
 
     // 6. 构造目标请求
     const targetUrl = new URL(`${GEMINI_BASE_URL}/${targetModel}:${action}`);
@@ -109,6 +115,7 @@ export default {
         headers: newHeaders
       });
     } catch (err) {
+      console.error(`[ERROR] Proxy fetch failed: ${err.message}`);
       return new Response(JSON.stringify({ error: err.message }), { 
         status: 500,
         headers: { "Content-Type": "application/json" }
@@ -119,7 +126,10 @@ export default {
 
 // --- 辅助函数：评估复杂度 ---
 async function getComplexityScore(prompt, apiKey) {
-  if (!prompt) return 30;
+  if (!prompt) {
+    console.warn("[DEBUG] Empty prompt, defaulting score to 30.");
+    return 30;
+  }
 
   const payload = {
     systemInstruction: {
@@ -142,19 +152,24 @@ async function getComplexityScore(prompt, apiKey) {
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) return 30;
+    if (!response.ok) {
+      console.error(`[ERROR] Score check API failed with status: ${response.status}`);
+      return 30;
+    }
 
     const result = await response.json();
     const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "30";
+    console.log(`[DEBUG] Raw score output from Lite: "${scoreStr}"`);
     
     // 提取数字
     const numMatch = scoreStr.match(/\d+/);
     let score = numMatch ? parseInt(numMatch[0], 10) : 30;
     
     // 限制范围
-    return Math.max(1, Math.min(100, score));
+    score = Math.max(1, Math.min(100, score));
+    return score;
   } catch (err) {
-    console.error("Score check failed:", err);
+    console.error(`[ERROR] Exception during score check: ${err.message}`);
     return 30;
   }
 }
