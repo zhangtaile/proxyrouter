@@ -125,7 +125,7 @@ async def proxy_gemini(model: str, action: str, request: Request):
     try:
         body = await request.json()
         # 调试：打印完整请求体
-        print(f"[DEBUG] Received request body: {json.dumps(body, indent=2, ensure_ascii=False)}")
+        # print(f"[DEBUG] Received request body: {json.dumps(body, indent=2, ensure_ascii=False)}")
     except Exception:
         return Response(content="Invalid JSON", status_code=400)
 
@@ -168,7 +168,7 @@ async def proxy_gemini(model: str, action: str, request: Request):
     if query_string:
         target_url += f"?{query_string}"
 
-    print(f"[DEBUG] Forwarding to URL: {target_url}")
+    # print(f"[DEBUG] Forwarding to URL: {target_url}")
 
     # 4. 根据不同的 action 处理流式或非流式
     if action == "streamGenerateContent":
@@ -190,8 +190,8 @@ async def proxy_gemini(model: str, action: str, request: Request):
                     chunk_count = 0
                     async for chunk in resp.aiter_bytes():
                         chunk_count += 1
-                        if chunk_count <= 3:  # 只打印前3个数据块
-                            print(f"[DEBUG] Stream chunk {chunk_count}: {chunk.decode(errors='ignore')[:200]}...")
+                        # if chunk_count <= 3:  # 只打印前3个数据块
+                        #     print(f"[DEBUG] Stream chunk {chunk_count}: {chunk.decode(errors='ignore')[:200]}...")
                         yield chunk
             except Exception as e:
                 print(f"Streaming error: {e}")
@@ -211,8 +211,8 @@ async def proxy_gemini(model: str, action: str, request: Request):
             )
             # 调试：打印响应内容
             response_text = resp.text
-            print(f"[DEBUG] Received response status: {resp.status_code}")
-            print(f"[DEBUG] Received response body (first 500 chars): {response_text[:500]}...")
+            # print(f"[DEBUG] Received response status: {resp.status_code}")
+            # print(f"[DEBUG] Received response body (first 500 chars): {response_text[:500]}...")
             return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
         except Exception as e:
             print(f"Proxy error: {e}")
