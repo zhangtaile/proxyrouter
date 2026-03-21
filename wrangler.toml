@@ -12,5 +12,4 @@ SIMPLE_MODEL = "gemini-3-flash-preview"
 COMPLEX_MODEL = "gemini-3.1-pro-preview"
 
 [placement]
-mode = "smart"
-hint = "wnam"
+region = "aws:us-east-1"
