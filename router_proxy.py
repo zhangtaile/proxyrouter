@@ -2,16 +2,16 @@ import asyncio
 import json
 import httpx
 import os
+import sys
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
 # ================= 配置区 =================
-# 建议通过环境变量设置: set GEMINI_API_KEY=your_key
-# 如果不设置环境变量，请将 "YOUR_GEMINI_API_KEY" 替换为真实的 Key
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY")
+# 优先级：Cherry Studio 传入的 Key > 环境变量 GEMINI_API_KEY
+DEFAULT_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # 模型配置
 LITE_MODEL = "gemini-3.1-flash-lite-preview"     # 用于判断复杂度
@@ -45,7 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def get_complexity_score(prompt: str) -> int:
+async def get_complexity_score(prompt: str, api_key: str) -> int:
     """
     使用 Lite 模型对用户问题进行复杂度评分。返回 1-100 的分数。
     70 分以上使用 Pro 模型，0-69 分使用 Flash 模型。
@@ -75,11 +75,11 @@ async def get_complexity_score(prompt: str) -> int:
         }
         
         headers = {
-            "x-goog-api-key": GEMINI_API_KEY,
+            "x-goog-api-key": api_key,
             "Content-Type": "application/json"
         }
         
-        print(f"[LITE] Sending complexity check | Model: {LITE_MODEL} | Prompt: \"{prompt[:50]}...\"")
+        # print(f"[LITE] Sending complexity check | Model: {LITE_MODEL} | Prompt: \"{prompt[:50]}...\"")
         
         url = f"{GEMINI_BASE_URL}/{LITE_MODEL}:generateContent"
         response = await app.state.client.post(
@@ -89,7 +89,7 @@ async def get_complexity_score(prompt: str) -> int:
         )
         
         if response.status_code != 200:
-            print(f"Complexity check API error: {response.status_code} - {response.text}")
+            print(f"Complexity check API error: {response.status_code}")
             return 30
 
         result = response.json()
@@ -121,7 +121,13 @@ async def proxy_gemini(model: str, action: str, request: Request):
     """
     接管 Gemini 原生接口。
     action 支持 `generateContent` 和 `streamGenerateContent`。
+    优先从请求头获取 API Key。
     """
+    # 1. 提取 API Key
+    api_key = request.headers.get("x-goog-api-key") or DEFAULT_GEMINI_API_KEY
+    if not api_key:
+        return Response(content=json.dumps({"error": "Missing API Key"}), status_code=401)
+
     try:
         body = await request.json()
         # 调试：打印完整请求体
@@ -133,7 +139,7 @@ async def proxy_gemini(model: str, action: str, request: Request):
     if not contents:
         return Response(content="No contents provided", status_code=400)
 
-    # 1. 获取用户最后一个问题进行复杂度评估
+    # 2. 获取用户最后一个问题进行复杂度评估
     last_user_message = ""
     for c in reversed(contents):
         if c.get("role") in ["user", None]: # role 可能是 None 或 user
@@ -144,9 +150,9 @@ async def proxy_gemini(model: str, action: str, request: Request):
     if not last_user_message:
         last_user_message = "Hello" # 如果只有图片等无文本情况的 fallback
         
-    complexity_score = await get_complexity_score(last_user_message)
+    complexity_score = await get_complexity_score(last_user_message, api_key)
 
-    # 2. 根据评分结果切换模型 (>=70 用 Pro，30-69 用 Flash，<30 用 Lite)
+    # 3. 根据评分结果切换模型 (>=70 用 Pro，30-69 用 Flash，<30 用 Lite)
     if complexity_score >= 70:
         target_model = COMPLEX_MODEL
     elif complexity_score >= 30:
@@ -156,9 +162,9 @@ async def proxy_gemini(model: str, action: str, request: Request):
         
     print(f"Routing request to: {target_model} | Action: {action} | Score: {complexity_score}/100 | Prompt: \"{last_user_message[:40]}...\"")
 
-    # 3. 准备转发请求
+    # 4. 准备转发请求
     headers = {
-        "x-goog-api-key": GEMINI_API_KEY,
+        "x-goog-api-key": api_key,
         "Content-Type": "application/json"
     }
     
@@ -170,7 +176,7 @@ async def proxy_gemini(model: str, action: str, request: Request):
 
     # print(f"[DEBUG] Forwarding to URL: {target_url}")
 
-    # 4. 根据不同的 action 处理流式或非流式
+    # 5. 根据不同的 action 处理流式或非流式
     if action == "streamGenerateContent":
         async def stream_generator():
             try:
@@ -220,6 +226,12 @@ async def proxy_gemini(model: str, action: str, request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"Starting Smart Router on http://localhost:{PORT}")
+    
+    # Windows 兼容性处理：设置 ProactorEventLoopPolicy 以支持大量并发连接
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+    print(f"Starting Smart Router on http://{HOST}:{PORT}")
     print(f"Configured Models: Lite={LITE_MODEL}, Simple={SIMPLE_MODEL}, Complex={COMPLEX_MODEL}")
+    
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")
