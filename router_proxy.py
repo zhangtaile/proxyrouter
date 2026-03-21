@@ -227,6 +227,13 @@ async def proxy_gemini(model: str, action: str, request: Request):
 if __name__ == "__main__":
     import uvicorn
     
+    # Windows 兼容性处理：如果以 --noconsole 打包，sys.stdout/stderr 会是 None
+    # 这会导致 uvicorn 的 logging 模块在调用 .isatty() 时崩溃
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+    
     # Windows 兼容性处理：设置 ProactorEventLoopPolicy 以支持大量并发连接
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
