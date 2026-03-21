@@ -1,0 +1,12 @@
+{
+  "name": "gemini-smart-router",
+  "version": "1.0.0",
+  "description": "Smart router for Google Gemini API models",
+  "main": "worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
