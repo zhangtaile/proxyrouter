@@ -95,10 +95,23 @@ export default {
       return new Response("No contents provided", { status: 400 });
     }
 
-    // 3. 提取最近 3 轮的对话内容作为评估依据 (多轮上下文)
-    const recentContext = contents.slice(-3).map(c => {
-      const text = (c.parts || []).map(p => p.text || "").join(" ");
-      return `${c.role || "user"}: ${text.substring(0, 500)}`; // 截断超长文本以节省打分 tokens
+    // 3. 提取最近 1 轮的对话内容作为评估依据
+    const recentContext = contents.slice(-1).map(c => {
+      // 过滤掉 thought: true 的 parts，并拼接普通文本
+      let text = (c.parts || [])
+        .filter(p => !p.thought)
+        .map(p => p.text || "")
+        .join(" ");
+      
+      // 移除可能的 <think>...</think> 标签内容
+      text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
+      // 截断超长文本，取最后 500 个字符以获得最相关的上下文和最终答案，避开开头可能的无标签 thinking
+      if (text.length > 500) {
+        text = "..." + text.slice(-500);
+      }
+      
+      return `${c.role || "user"}: ${text}`;
     }).join("\n");
 
     // 4. 获取复杂度评分
