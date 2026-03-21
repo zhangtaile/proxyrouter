@@ -175,7 +175,7 @@ async function getComplexityScore(prompt, apiKey) {
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
 
   try {
     const url = `${GEMINI_BASE_URL}/${LITE_MODEL}:generateContent`;
