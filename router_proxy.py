@@ -18,11 +18,10 @@ LITE_MODEL = "gemini-3.1-flash-lite-preview"     # 用于判断复杂度
 SIMPLE_MODEL = "gemini-3-flash-preview"          # 简单任务模型
 COMPLEX_MODEL = "gemini-3.1-pro-preview"         # 复杂任务模型
 
-# 重要：修正后的 Google OpenAI 兼容路径 (增加 /openai/)
-GOOGLE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+# Google Gemini 原生接口路径
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # 监听配置
-
 HOST = "127.0.0.1"
 PORT = 1234
 # ==========================================
@@ -56,24 +55,35 @@ async def get_complexity_score(prompt: str) -> int:
 
     try:
         payload = {
-            "model": LITE_MODEL,
-            "messages": [
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a routing assistant. Rate the complexity of the user's prompt on a scale of 1-100.\n\nScoring guide:\n- 1-30: Simple greetings, basic facts, yes/no questions, short translations\n- 31-50: Basic code tasks, simple explanations, straightforward requests\n- 51-70: Moderate reasoning, multi-step tasks, detailed explanations\n- 71-90: Complex reasoning, architecture design, complex debugging, creative writing\n- 91-100: Advanced research, system design, long-form content, deep analysis\n\nReply ONLY with a number (1-100)."
+                    }
+                ]
+            },
+            "contents": [
                 {
-                    "role": "system", 
-                    "content": "You are a routing assistant. Rate the complexity of the user's prompt on a scale of 1-100.\n\nScoring guide:\n- 1-30: Simple greetings, basic facts, yes/no questions, short translations\n- 31-50: Basic code tasks, simple explanations, straightforward requests\n- 51-70: Moderate reasoning, multi-step tasks, detailed explanations\n- 71-90: Complex reasoning, architecture design, complex debugging, creative writing\n- 91-100: Advanced research, system design, long-form content, deep analysis\n\nReply ONLY with a number (1-100)."
-                },
-                {"role": "user", "content": prompt}
+                    "role": "user",
+                    "parts": [{"text": prompt}]
+                }
             ],
-            "max_tokens": 20,
-            "temperature": 0.1
+            "generationConfig": {
+                "maxOutputTokens": 20,
+                "temperature": 0.1
+            }
         }
         
-        headers = {"Authorization": f"Bearer {GEMINI_API_KEY}"}
+        headers = {
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        }
         
-        print(f"[LITE] Sending complexity check | Model: {LITE_MODEL} | Prompt: \"{prompt[:50]}...\" | Max tokens: {payload['max_tokens']}")
+        print(f"[LITE] Sending complexity check | Model: {LITE_MODEL} | Prompt: \"{prompt[:50]}...\"")
         
+        url = f"{GEMINI_BASE_URL}/{LITE_MODEL}:generateContent"
         response = await app.state.client.post(
-            GOOGLE_ENDPOINT,
+            url,
             json=payload,
             headers=headers
         )
@@ -83,44 +93,57 @@ async def get_complexity_score(prompt: str) -> int:
             return 30
 
         result = response.json()
-        score_str = result['choices'][0]['message']['content'].strip()
+        try:
+            score_str = result['candidates'][0]['content']['parts'][0]['text'].strip()
+        except (KeyError, IndexError):
+            print(f"Complexity check failed to parse response: {result}")
+            return 30
+            
         # 提取数字
         score = int(''.join(filter(str.isdigit, score_str)) or '30')
         score = max(1, min(100, score)) # 限制在 1-100 范围
+        
         if score >= 70:
             model_choice = "[PRO]"
         elif score >= 30:
             model_choice = "[FLASH]"
         else:
             model_choice = "[LITE]"
+            
         print(f"Decision: {model_choice} | Score: {score}/100 (Lite output: {score_str})")
         return score
     except Exception as e:
         print(f"Complexity check failed: {e}, defaulting to score 30.")
         return 30
 
-@app.post("/v1/chat/completions")
-async def proxy_chat(request: Request):
+@app.post("/v1beta/models/{model}:{action}")
+async def proxy_gemini(model: str, action: str, request: Request):
+    """
+    接管 Gemini 原生接口。
+    action 支持 `generateContent` 和 `streamGenerateContent`。
+    """
     try:
         body = await request.json()
+        # 调试：打印完整请求体
+        print(f"[DEBUG] Received request body: {json.dumps(body, indent=2, ensure_ascii=False)}")
     except Exception:
         return Response(content="Invalid JSON", status_code=400)
 
-    messages = body.get("messages", [])
-    if not messages:
-        return Response(content="No messages provided", status_code=400)
+    contents = body.get("contents", [])
+    if not contents:
+        return Response(content="No contents provided", status_code=400)
 
     # 1. 获取用户最后一个问题进行复杂度评估
     last_user_message = ""
-    for m in reversed(messages):
-        if m.get("role") == "user":
-            content = m.get("content", "")
-            if isinstance(content, list): # 处理多模态/复杂输入
-                last_user_message = " ".join([item.get("text", "") for item in content if isinstance(item, dict) and item.get("type") == "text"])
-            else:
-                last_user_message = str(content)
+    for c in reversed(contents):
+        if c.get("role") in ["user", None]: # role 可能是 None 或 user
+            parts = c.get("parts", [])
+            last_user_message = " ".join([p.get("text", "") for p in parts if "text" in p])
             break
 
+    if not last_user_message:
+        last_user_message = "Hello" # 如果只有图片等无文本情况的 fallback
+        
     complexity_score = await get_complexity_score(last_user_message)
 
     # 2. 根据评分结果切换模型 (>=70 用 Pro，30-69 用 Flash，<30 用 Lite)
@@ -130,48 +153,66 @@ async def proxy_chat(request: Request):
         target_model = SIMPLE_MODEL
     else:
         target_model = LITE_MODEL
-    body["model"] = target_model
-    print(f"Routing request to: {target_model} | Score: {complexity_score}/100 | Prompt: \"{last_user_message[:40]}...\"")
+        
+    print(f"Routing request to: {target_model} | Action: {action} | Score: {complexity_score}/100 | Prompt: \"{last_user_message[:40]}...\"")
 
     # 3. 准备转发请求
     headers = {
-        "Authorization": f"Bearer {GEMINI_API_KEY}",
+        "x-goog-api-key": GEMINI_API_KEY,
         "Content-Type": "application/json"
     }
     
-    # 支持流式传输 (Streaming)
-    if body.get("stream", False):
+    # 构建目标 URL，透传查询参数 (例如 ?alt=sse)
+    query_string = request.url.query
+    target_url = f"{GEMINI_BASE_URL}/{target_model}:{action}"
+    if query_string:
+        target_url += f"?{query_string}"
+
+    print(f"[DEBUG] Forwarding to URL: {target_url}")
+
+    # 4. 根据不同的 action 处理流式或非流式
+    if action == "streamGenerateContent":
         async def stream_generator():
             try:
-                print(f"[STREAM] Forwarding to {target_model} | Messages: {len(messages)} | Streaming: true | Prompt: \"{last_user_message[:50]}...\"")
+                print(f"[STREAM] Forwarding to {target_model} | Streaming: true")
                 async with app.state.client.stream(
                     "POST", 
-                    GOOGLE_ENDPOINT, 
+                    target_url, 
                     json=body, 
                     headers=headers
                 ) as resp:
                     if resp.status_code != 200:
                         error_detail = await resp.aread()
                         print(f"Upstream Error: {error_detail}")
-                        yield f"data: {json.dumps({'error': 'Upstream error', 'details': error_detail.decode()})}\n\n".encode()
+                        yield error_detail
                         return
 
+                    chunk_count = 0
                     async for chunk in resp.aiter_bytes():
+                        chunk_count += 1
+                        if chunk_count <= 3:  # 只打印前3个数据块
+                            print(f"[DEBUG] Stream chunk {chunk_count}: {chunk.decode(errors='ignore')[:200]}...")
                         yield chunk
             except Exception as e:
                 print(f"Streaming error: {e}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n".encode()
-
-        return StreamingResponse(stream_generator(), media_type="text/event-stream")
+                yield json.dumps({'error': str(e)}).encode()
+                
+        # 原生 Gemini 接口如果附加了 ?alt=sse，则以 text/event-stream 响应
+        media_type = "text/event-stream" if "alt=sse" in query_string else "application/json"
+        return StreamingResponse(stream_generator(), media_type=media_type)
     else:
         # 非流式传输
         try:
-            print(f"[REQUEST] Forwarding to {target_model} | Messages: {len(messages)} | Streaming: false | Prompt: \"{last_user_message[:50]}...\"")
+            print(f"[REQUEST] Forwarding to {target_model} | Streaming: false")
             resp = await app.state.client.post(
-                GOOGLE_ENDPOINT, 
+                target_url, 
                 json=body, 
                 headers=headers
             )
+            # 调试：打印响应内容
+            response_text = resp.text
+            print(f"[DEBUG] Received response status: {resp.status_code}")
+            print(f"[DEBUG] Received response body (first 500 chars): {response_text[:500]}...")
             return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
         except Exception as e:
             print(f"Proxy error: {e}")
