@@ -2,6 +2,9 @@ name = "proxyrouter"
 main = "worker.js"
 compatibility_date = "2024-03-21"
 
+[observability]
+enabled = false
+
 [vars]
 # 模型配置
 LITE_MODEL = "gemini-3.1-flash-lite-preview"
