@@ -46,6 +46,43 @@ export default {
     }
     console.log(`[DEBUG] API Key identified: ${apiKey.substring(0, 6)}...${apiKey.substring(apiKey.length - 4)}`);
 
+    // 2.5 OOM (内存溢出) 保护
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+    const OOM_THRESHOLD = 5 * 1024 * 1024; // 5MB
+    if (contentLength > OOM_THRESHOLD) {
+      console.warn(`[WARNING] Payload too large (${contentLength} bytes). Triggering OOM protection. Routing directly to FLASH.`);
+      
+      const targetUrl = new URL(`${GEMINI_BASE_URL}/${SIMPLE_MODEL}:${action}`);
+      url.searchParams.forEach((value, key) => targetUrl.searchParams.append(key, value));
+
+      const newHeaders = new Headers(request.headers);
+      newHeaders.set("x-goog-api-key", apiKey);
+
+      const targetRequest = new Request(targetUrl.toString(), {
+        method: request.method,
+        headers: newHeaders,
+        body: request.body,
+        duplex: "half"
+      });
+
+      try {
+        let response = await fetch(targetRequest);
+        let responseHeaders = new Headers(response.headers);
+        responseHeaders.set("Access-Control-Allow-Origin", "*");
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders
+        });
+      } catch (err) {
+        console.error(`[ERROR] OOM bypass fetch failed: ${err.message}`);
+        return new Response(JSON.stringify({ error: err.message }), { 
+          status: 500,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+    }
+
     let body;
     try {
       body = await request.json();
@@ -58,19 +95,15 @@ export default {
       return new Response("No contents provided", { status: 400 });
     }
 
-    // 3. 提取用户最后一个问题进行复杂度评估
-    let lastUserMessage = "Hello";
-    for (let i = contents.length - 1; i >= 0; i--) {
-      const c = contents[i];
-      if (c.role === "user" || !c.role) {
-        lastUserMessage = (c.parts || []).map(p => p.text || "").join(" ");
-        break;
-      }
-    }
+    // 3. 提取最近 3 轮的对话内容作为评估依据 (多轮上下文)
+    const recentContext = contents.slice(-3).map(c => {
+      const text = (c.parts || []).map(p => p.text || "").join(" ");
+      return `${c.role || "user"}: ${text.substring(0, 500)}`; // 截断超长文本以节省打分 tokens
+    }).join("\n");
 
     // 4. 获取复杂度评分
-    console.log(`[DEBUG] Analyzing complexity for prompt: "${lastUserMessage.substring(0, 50)}..."`);
-    const score = await getComplexityScore(lastUserMessage, apiKey);
+    console.log(`[DEBUG] Analyzing complexity for prompt: "${recentContext.substring(0, 50).replace(/\n/g, ' ')}..."`);
+    const score = await getComplexityScore(recentContext, apiKey);
 
     // 5. 模型路由
     let targetModel = LITE_MODEL;
@@ -141,6 +174,9 @@ async function getComplexityScore(prompt, apiKey) {
     generationConfig: { maxOutputTokens: 20, temperature: 0.1 }
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s timeout
+
   try {
     const url = `${GEMINI_BASE_URL}/${LITE_MODEL}:generateContent`;
     const response = await fetch(url, {
@@ -149,27 +185,31 @@ async function getComplexityScore(prompt, apiKey) {
         "x-goog-api-key": apiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      console.error(`[ERROR] Score check API failed with status: ${response.status}`);
-      return 30;
+      console.error(`[ERROR] Score check API failed with status: ${response.status}. Fallback to 50 (FLASH).`);
+      return 50;
     }
 
     const result = await response.json();
-    const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "30";
+    const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "50";
     console.log(`[DEBUG] Raw score output from Lite: "${scoreStr}"`);
     
     // 提取数字
     const numMatch = scoreStr.match(/\d+/);
-    let score = numMatch ? parseInt(numMatch[0], 10) : 30;
+    let score = numMatch ? parseInt(numMatch[0], 10) : 50;
     
     // 限制范围
     score = Math.max(1, Math.min(100, score));
     return score;
   } catch (err) {
-    console.error(`[ERROR] Exception during score check: ${err.message}`);
-    return 30;
+    clearTimeout(timeoutId);
+    console.warn(`[WARNING] Exception/Timeout during score check: ${err.name} - ${err.message}. Fallback to 50 (FLASH).`);
+    return 50;
   }
 }
