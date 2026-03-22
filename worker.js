@@ -134,11 +134,11 @@ export default {
     // 动态追加系统指令
     let systemInstructionAppend = "";
     if (modelLabel === "LITE") {
-      systemInstructionAppend = "请以\"这个问题不难\"作为开始回答问题";
+      systemInstructionAppend = "请以\"这个问题不难\n\"作为开始回答问题";
     } else if (modelLabel === "FLASH") {
-      systemInstructionAppend = "请以\"这个问题难度正常\"作为开始回答问题";
+      systemInstructionAppend = "请以\"这个问题难度正常\n\"作为开始回答问题";
     } else if (modelLabel === "PRO") {
-      systemInstructionAppend = "请以\"这个问题有难度\"作为开始回答问题";
+      systemInstructionAppend = "请以\"这个问题有难度\n\"作为开始回答问题";
     }
 
     if (!body.systemInstruction) {
