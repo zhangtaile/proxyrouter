@@ -131,6 +131,31 @@ export default {
 
     console.log(`[ROUTE] Score: ${score}/100 | Decision: ${modelLabel} (${targetModel})`);
 
+    // 动态追加系统指令
+    let systemInstructionAppend = "";
+    if (modelLabel === "LITE") {
+      systemInstructionAppend = "请以\"这个问题不难\"作为开始回答问题";
+    } else if (modelLabel === "FLASH") {
+      systemInstructionAppend = "请以\"这个问题难度正常\"作为开始回答问题";
+    } else if (modelLabel === "PRO") {
+      systemInstructionAppend = "请以\"这个问题有难度\"作为开始回答问题";
+    }
+
+    if (!body.systemInstruction) {
+      body.systemInstruction = { parts: [{ text: "" }] };
+    } else if (!body.systemInstruction.parts || !Array.isArray(body.systemInstruction.parts)) {
+      body.systemInstruction.parts = [{ text: "" }];
+    } else if (body.systemInstruction.parts.length === 0) {
+      body.systemInstruction.parts.push({ text: "" });
+    } else if (typeof body.systemInstruction.parts[0].text !== "string") {
+      body.systemInstruction.parts[0].text = "";
+    }
+    
+    const existingText = body.systemInstruction.parts[0].text;
+    body.systemInstruction.parts[0].text = existingText 
+      ? existingText + "\n\n" + systemInstructionAppend
+      : systemInstructionAppend;
+
     // 6. 构造目标请求
     const targetUrl = new URL(`${GEMINI_BASE_URL}/${targetModel}:${action}`);
     // 透传 URL 上的 query 参数 (例如 ?alt=sse)
