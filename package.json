@@ -1,10 +1,11 @@
 {
   "name": "gemini-smart-router",
   "version": "1.0.0",
-  "description": "Smart router for Google Gemini API models",
+  "description": "Smart router for Google Gemini API models, supporting Cloudflare Workers and Vercel Edge Functions",
   "main": "worker.js",
   "scripts": {
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:vercel": "vercel deploy"
   },
   "devDependencies": {
     "wrangler": "^4.76.0"
