@@ -124,7 +124,23 @@ export async function handleRequest(request, env = {}) {
   }).join("\n");
 
   // 4. 获取复杂度评分
-  let score = await getComplexityScore(recentContext, apiKey, LITE_MODEL);
+  let score;
+  try {
+    score = await getComplexityScore(recentContext, apiKey, LITE_MODEL);
+  } catch (err) {
+    if (err.message.startsWith("AUTH_FAILED:")) {
+      const status = parseInt(err.message.split(":")[1], 10);
+      console.error(`[ERROR] Authentication failed (HTTP ${status}). Stopping request.`);
+      return new Response(JSON.stringify({ 
+        error: "Invalid API Key or Permission Denied", 
+        status: status 
+      }), { 
+        status: status, 
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } 
+      });
+    }
+    score = 50; // 对于其他非鉴权错误（如超时），回退到默认分值
+  }
 
   // 如果包含多模态数据，复杂度评分至少为 40 (确保路由到 FLASH 或以上模型)
   if (hasMultimodal && score < 40) {
@@ -229,7 +245,12 @@ async function getComplexityScore(prompt, apiKey, LITE_MODEL) {
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) return 50;
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`AUTH_FAILED:${response.status}`);
+      }
+      return 50;
+    }
 
     const result = await response.json();
     const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "50";
@@ -238,6 +259,7 @@ async function getComplexityScore(prompt, apiKey, LITE_MODEL) {
     return Math.max(1, Math.min(100, score));
   } catch (err) {
     clearTimeout(timeoutId);
+    if (err.message.startsWith("AUTH_FAILED:")) throw err;
     return 50;
   }
 }
