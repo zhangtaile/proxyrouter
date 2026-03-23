@@ -55,12 +55,19 @@ ProxyRouter 是一个轻量级、高性能的边缘路由器，作为 Google Gem
 
 ### 1. API Key (Security) | API 密钥（安全）
 
-ProxyRouter prioritizes the API Key from the client. To set a fallback: | 代理优先使用客户端传入的 Key。设置备用 Key：
+ProxyRouter prioritizes the API Key from the client (`x-goog-api-key`). To set a fallback: | 代理优先使用客户端传入的 Key (`x-goog-api-key`)。设置备用 Key：
 
 - **Cloudflare**: Go to Worker -> **Settings** -> **Variables** -> Add a **Secret** named `GEMINI_API_KEY`. | **Cloudflare**: 进入 Worker -> **设置** -> **变量** -> 添加名为 `GEMINI_API_KEY` 的 **加密变量 (Secret)**。
 - **Vercel**: Go to Project -> **Settings** -> **Environment Variables** -> Add `GEMINI_API_KEY`. | **Vercel**: 进入项目 -> **Settings** -> **Environment Variables** -> 添加 `GEMINI_API_KEY`。
 
-### 2. Model Settings | 模型设置
+### 2. Security Settings | 安全设置 (New)
+
+To prevent unauthorized access to your proxy: | 防止他人盗用你的代理：
+
+- **`AUTH_TOKEN`**: Set this environment variable to a secret string. If set, clients **must** provide `Authorization: Bearer <your_token>` in their request headers. | 设置此环境变量。如果启用，客户端**必须**在请求头中包含 `Authorization: Bearer <your_token>`。
+- **`ALLOWED_ORIGINS`**: Restrict which websites can access your proxy. Default is `*`. Example: `https://chat.example.com`. | 限制可以访问你代理的网站。默认值为 `*`。例如：`https://chat.example.com`。
+
+### 3. Model Settings | 模型设置
 
 You can override the default models by setting environment variables: | 你可以通过设置环境变量来覆盖默认模型：
 
