@@ -156,19 +156,12 @@ export async function handleRequest(request, env = {}) {
   }
 
   if (!body.systemInstruction) {
-    body.systemInstruction = { parts: [{ text: "" }] };
+    body.systemInstruction = { parts: [{ text: systemInstructionAppend }] };
   } else if (!body.systemInstruction.parts || !Array.isArray(body.systemInstruction.parts)) {
-    body.systemInstruction.parts = [{ text: "" }];
-  } else if (body.systemInstruction.parts.length === 0) {
-    body.systemInstruction.parts.push({ text: "" });
-  } else if (typeof body.systemInstruction.parts[0].text !== "string") {
-    body.systemInstruction.parts[0].text = "";
+    body.systemInstruction.parts = [{ text: systemInstructionAppend }];
+  } else {
+    body.systemInstruction.parts.push({ text: "\n\n" + systemInstructionAppend });
   }
-  
-  const existingText = body.systemInstruction.parts[0].text;
-  body.systemInstruction.parts[0].text = existingText 
-    ? existingText + "\n\n" + systemInstructionAppend
-    : systemInstructionAppend;
 
   // 6. 构造目标请求
   const targetUrl = new URL(`${GEMINI_BASE_URL}/${targetModel}:${action}`);
