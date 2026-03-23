@@ -1,6 +1,7 @@
 name = "proxyrouter"
 main = "worker.js"
 compatibility_date = "2024-03-21"
+keep_vars = true
 
 [observability]
 enabled = false
