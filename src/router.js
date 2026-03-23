@@ -101,9 +101,17 @@ export async function handleRequest(request, env = {}) {
     return new Response("No contents provided", { status: 400 });
   }
 
-  // 3. 提取最近 2 轮的对话内容作为评估依据
+  // 3. 提取最近 2 轮的对话内容作为评估依据，并检测是否包含多模态数据
+  let hasMultimodal = false;
   const recentContext = contents.slice(-2).map(c => {
-    let text = (c.parts || [])
+    const parts = c.parts || [];
+    
+    // 检测多模态部分 (图片、文件、视频等)
+    if (parts.some(p => p.inlineData || p.fileData || p.videoMetadata)) {
+      hasMultimodal = true;
+    }
+
+    let text = parts
       .filter(p => !p.thought)
       .map(p => p.text || "")
       .join(" ");
@@ -116,7 +124,13 @@ export async function handleRequest(request, env = {}) {
   }).join("\n");
 
   // 4. 获取复杂度评分
-  const score = await getComplexityScore(recentContext, apiKey, LITE_MODEL);
+  let score = await getComplexityScore(recentContext, apiKey, LITE_MODEL);
+
+  // 如果包含多模态数据，复杂度评分至少为 40 (确保路由到 FLASH 或以上模型)
+  if (hasMultimodal && score < 40) {
+    console.log("[DEBUG] Multimodal detected. Boosting score from " + score + " to 40.");
+    score = 40;
+  }
 
   // 5. 模型路由
   let targetModel = LITE_MODEL;
