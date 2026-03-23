@@ -11,5 +11,8 @@ LITE_MODEL = "gemini-3.1-flash-lite-preview"
 SIMPLE_MODEL = "gemini-3-flash-preview"
 COMPLEX_MODEL = "gemini-3.1-pro-preview"
 
+# 功能开关
+ENABLE_DIFFICULTY_PROMPT = "true"  # 是否在回答前插入难度提示语
+
 [placement]
 region = "aws:us-east-1"

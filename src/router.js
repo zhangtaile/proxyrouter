@@ -16,6 +16,8 @@ export async function handleRequest(request, env = {}) {
   const LITE_MODEL = getEnv("LITE_MODEL") || DEFAULT_LITE_MODEL;
   const SIMPLE_MODEL = getEnv("SIMPLE_MODEL") || DEFAULT_SIMPLE_MODEL;
   const COMPLEX_MODEL = getEnv("COMPLEX_MODEL") || DEFAULT_COMPLEX_MODEL;
+  const ENABLE_DIFFICULTY_PROMPT = getEnv("ENABLE_DIFFICULTY_PROMPT");
+  const shouldAppendDifficulty = !ENABLE_DIFFICULTY_PROMPT || !["false", "0"].includes(ENABLE_DIFFICULTY_PROMPT.toLowerCase());
 
   // 1. 处理 CORS (跨域请求)
   if (request.method === "OPTIONS") {
@@ -162,21 +164,23 @@ export async function handleRequest(request, env = {}) {
   console.log(`[ROUTE] Score: ${score}/100 | Decision: ${modelLabel} (${targetModel})`);
 
   // 动态追加系统指令
-  let systemInstructionAppend = "";
-  if (modelLabel === "LITE") {
-    systemInstructionAppend = "请以\"这个问题不难\n\"作为开始回答问题";
-  } else if (modelLabel === "FLASH") {
-    systemInstructionAppend = "请以\"这个问题难度正常\n\"作为开始回答问题";
-  } else if (modelLabel === "PRO") {
-    systemInstructionAppend = "请以\"这个问题有难度\n\"作为开始回答问题";
-  }
+  if (shouldAppendDifficulty) {
+    let systemInstructionAppend = "";
+    if (modelLabel === "LITE") {
+      systemInstructionAppend = "请以\"这个问题不难\n\"作为开始回答问题";
+    } else if (modelLabel === "FLASH") {
+      systemInstructionAppend = "请以\"这个问题难度正常\n\"作为开始回答问题";
+    } else if (modelLabel === "PRO") {
+      systemInstructionAppend = "请以\"这个问题有难度\n\"作为开始回答问题";
+    }
 
-  if (!body.systemInstruction) {
-    body.systemInstruction = { parts: [{ text: systemInstructionAppend }] };
-  } else if (!body.systemInstruction.parts || !Array.isArray(body.systemInstruction.parts)) {
-    body.systemInstruction.parts = [{ text: systemInstructionAppend }];
-  } else {
-    body.systemInstruction.parts.push({ text: "\n\n" + systemInstructionAppend });
+    if (!body.systemInstruction) {
+      body.systemInstruction = { parts: [{ text: systemInstructionAppend }] };
+    } else if (!body.systemInstruction.parts || !Array.isArray(body.systemInstruction.parts)) {
+      body.systemInstruction.parts = [{ text: systemInstructionAppend }];
+    } else {
+      body.systemInstruction.parts.push({ text: "\n\n" + systemInstructionAppend });
+    }
   }
 
   // 6. 构造目标请求
