@@ -2,7 +2,7 @@
 
 ProxyRouter is a lightweight, high-performance edge router that acts as an intelligent proxy for the Google Gemini API. It automatically routes user prompts to different Gemini models (Lite, Flash, or Pro) based on a real-time complexity analysis.
 
-[English](#english) | [中文](#中文)
+[English](#english) | [简体中文](#简体中文) | [繁體中文](#繁體中文)
 
 ---
 
@@ -15,7 +15,7 @@ ProxyRouter is a lightweight, high-performance edge router that acts as an intel
   - **Lite (< 30)**: Simple greetings, basic facts.
   - **Flash (30-69)**: Standard reasoning, coding, multi-step tasks.
   - **Pro (>= 70)**: Complex architecture, deep research, advanced debugging.
-- **Native API Compatibility**: Fully compatible with Google Gemini native format (`/v1beta/models`).
+- **Native API Compatibility**: Fully compatible for Google Gemini native format (`/v1beta/models`).
 - **Seamless Integration**: Works perfectly with **Cherry Studio** by mimicking the official provider.
 - **Streaming Support**: Full support for `streamGenerateContent`.
 
@@ -85,7 +85,7 @@ MIT
 
 ---
 
-<a name="中文"></a>
+<a name="简体中文"></a>
 ## 🌟 主要特性
 
 - **多平台支持**: 可部署在 **Cloudflare Workers** 或 **Vercel Edge Functions**。
@@ -154,4 +154,77 @@ MIT
 4. 开始聊天！代理将自动处理模型切换。
 
 ## 📄 许可证
+MIT
+
+---
+
+<a name="繁體中文"></a>
+## 🌟 主要特性
+
+- **多平台支持**: 可部署在 **Cloudflare Workers** 或 **Vercel Edge Functions**。
+- **智能路由**: 使用 `gemini-3.1-flash-lite-preview` 評估提示詞複雜度（1-100分）。
+- **三級模型支持**:
+  - **Lite (< 30)**: 處理簡單問候、基礎事實。
+  - **Flash (30-69)**: 處理標準推理、編程任務、多步指令。
+  - **Pro (>= 70)**: 處理複雜架構設計、深度研究、高級調試。
+- **原生接口兼容**: 完全兼容 Google Gemini 原生格式 (`/v1beta/models`)。
+- **無縫集成**: 模擬官方提供商，完美匹配 **Cherry Studio** 等客戶端。
+- **流式輸出**: 完美支持 `streamGenerateContent`。
+
+## 🚀 部署指南
+
+### 選項 1：Cloudflare Workers（推薦）
+
+#### GitHub 自動部署
+1. Fork 本倉庫。
+2. 在 Cloudflare 控制台，進入 **Workers & Pages** -> **Create application** -> **Pages** -> **Connect to Git**。
+3. 選擇你 Fork 的倉庫並部署。
+
+#### 手動部署
+1. 安裝 Wrangler: `npm install -g wrangler`
+2. 登錄: `wrangler login`
+3. 部署: `npm run deploy`
+
+---
+
+### 選項 2：Vercel Edge Functions
+
+#### Vercel 面板部署
+1. Fork 本倉庫。
+2. 在 Vercel 控制台，點擊 **Add New** -> **Project** 並導入倉庫。
+3. 點擊 **Deploy**，Vercel 會自動識別配置。
+
+## ⚙️ 配置說明
+
+### 1. API 金鑰 (Security)
+代理優先使用客戶端傳入的 Key (`x-goog-api-key`)。設置備用 Key：
+- **Cloudflare**: 進入 Worker -> **設置** -> **變量** -> 添加名為 `GEMINI_API_KEY` 的 **加密變量 (Secret)**。
+- **Vercel**: 進入項目 -> **Settings** -> **Environment Variables** -> 添加 `GEMINI_API_KEY`。
+
+### 2. 安全設置 (新增)
+防止他人盜用你的代理：
+- **`AUTH_TOKEN`**: 設置一個秘密字符串。啟用後，客戶端必須在請求頭中包含 `Authorization: Bearer <your_token>`。
+- **`ALLOWED_ORIGINS`**: 限制可以訪問你代理的域名。默認值為 `*`。例如：`https://chat.example.com`。
+
+### 3. 模型設置
+你可以通過設置環境變量來覆蓋默認模型：
+- `LITE_MODEL`: 用於複雜度評分的模型。
+- `SIMPLE_MODEL`: 處理中低難度任務的模型。
+- `COMPLEX_MODEL`: 處理高難度任務的模型。
+
+### 4. 功能開關：`ENABLE_DIFFICULTY_PROMPT`
+啟用後，AI 在回答前會追加難度標識：
+- **Lite**: "請以「這個問題不難」作為開始回答問題"
+- **Flash**: "請以「這個問題難度正常」作為開始回答問題"
+- **Pro**: "請以「這個問題有難度」作為開始回答問題"
+
+**默認值**: 啟用。設置為 `"false"` 或 `"0"` 可關閉。
+
+## 🖥️ 在 Cherry Studio 中使用
+1. **設置** -> **模型提供商** -> **Google Gemini**。
+2. **API Key**: 輸入真實的 Gemini Key。
+3. **代理地址**: 輸入你部署後的 URL。
+4. 開始聊天！代理將自動處理模型切換。
+
+## 📄 許可證
 MIT
