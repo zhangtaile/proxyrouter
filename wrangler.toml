@@ -7,10 +7,12 @@ keep_vars = true
 enabled = false
 
 [vars]
-SCORING_MODEL = "gemini-3.1-flash-lite-preview"
-LITE_MODEL = "gemini-3.1-flash-lite-preview"
-SIMPLE_MODEL = "gemini-3-flash-preview"
-COMPLEX_MODEL = "gemini-3.1-pro-preview"
+# 您可以在 Cloudflare 控制台的 Settings -> Variables 中手动设置以下变量。
+# 由于设置了 keep_vars = true，它们在部署时不会被删除或覆盖。
+# SCORING_MODEL = "gemini-3.1-flash-lite-preview"
+# LITE_MODEL = "gemini-3.1-flash-lite-preview"
+# SIMPLE_MODEL = "gemini-3-flash-preview"
+# COMPLEX_MODEL = "gemini-3.1-pro-preview"
 
 # 功能开关
 # ENABLE_DIFFICULTY_PROMPT = "true"  # 是否在回答前插入难度提示语
