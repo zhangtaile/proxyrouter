@@ -1,4 +1,5 @@
 // ================= 默认配置 =================
+const DEFAULT_SCORING_MODEL = "gemini-3.1-flash-lite-preview";
 const DEFAULT_LITE_MODEL = "gemini-3.1-flash-lite-preview";
 const DEFAULT_SIMPLE_MODEL = "gemini-3-flash-preview";
 const DEFAULT_COMPLEX_MODEL = "gemini-3.1-pro-preview";
@@ -12,7 +13,8 @@ const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models
 export async function handleRequest(request, env = {}) {
   // 获取配置，优先使用传入的 env，其次尝试全局 process.env，最后使用默认值
   const getEnv = (key) => env?.[key] || (typeof process !== 'undefined' ? process.env?.[key] : undefined);
-  
+
+  const SCORING_MODEL = getEnv("SCORING_MODEL") || DEFAULT_SCORING_MODEL;
   const LITE_MODEL = getEnv("LITE_MODEL") || DEFAULT_LITE_MODEL;
   const SIMPLE_MODEL = getEnv("SIMPLE_MODEL") || DEFAULT_SIMPLE_MODEL;
   const COMPLEX_MODEL = getEnv("COMPLEX_MODEL") || DEFAULT_COMPLEX_MODEL;
@@ -135,7 +137,7 @@ export async function handleRequest(request, env = {}) {
   // 6. 获取复杂度评分
   let score;
   try {
-    score = await getComplexityScore(recentContext, apiKey, LITE_MODEL);
+    score = await getComplexityScore(recentContext, apiKey, SCORING_MODEL);
   } catch (err) {
     if (err.message.startsWith("AUTH_FAILED:")) {
       const status = parseInt(err.message.split(":")[1], 10);
@@ -207,7 +209,7 @@ export async function handleRequest(request, env = {}) {
 }
 
 // --- 辅助函数：评估复杂度 ---
-async function getComplexityScore(prompt, apiKey, LITE_MODEL) {
+async function getComplexityScore(prompt, apiKey, scoringModel) {
   if (!prompt) return 30;
 
   const payload = {
@@ -224,7 +226,7 @@ async function getComplexityScore(prompt, apiKey, LITE_MODEL) {
   const timeoutId = setTimeout(() => controller.abort(), 4000);
 
   try {
-    const url = `${GEMINI_BASE_URL}/${LITE_MODEL}:generateContent`;
+    const url = `${GEMINI_BASE_URL}/${scoringModel}:generateContent`;
     const response = await fetch(url, {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },

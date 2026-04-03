@@ -62,7 +62,8 @@ To prevent unauthorized access to your proxy:
 
 ### 3. Model Settings
 Override default models via environment variables:
-- `LITE_MODEL`: Model used for complexity scoring.
+- `SCORING_MODEL`: Model used for complexity scoring.
+- `LITE_MODEL`: Model for extremely simple tasks.
 - `SIMPLE_MODEL`: Model for low-to-medium tasks.
 - `COMPLEX_MODEL`: Model for high-complexity tasks.
 
@@ -135,7 +136,8 @@ MIT
 
 ### 3. 模型设置
 你可以通过设置环境变量来覆盖默认模型：
-- `LITE_MODEL`: 用于复杂度评分的模型。
+- `SCORING_MODEL`: 用于复杂度评分的模型。
+- `LITE_MODEL`: 处理极简任务的模型。
 - `SIMPLE_MODEL`: 处理中低难度任务的模型。
 - `COMPLEX_MODEL`: 处理高难度任务的模型。
 
@@ -208,7 +210,8 @@ MIT
 
 ### 3. 模型設置
 你可以通過設置環境變量來覆蓋默認模型：
-- `LITE_MODEL`: 用於複雜度評分的模型。
+- `SCORING_MODEL`: 用於複雜度評分的模型。
+- `LITE_MODEL`: 處理極简任務的模型。
 - `SIMPLE_MODEL`: 處理中低難度任務的模型。
 - `COMPLEX_MODEL`: 處理高難度任務的模型。
 

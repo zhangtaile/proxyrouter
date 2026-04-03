@@ -7,7 +7,7 @@ keep_vars = true
 enabled = false
 
 [vars]
-# 模型配置
+SCORING_MODEL = "gemini-3.1-flash-lite-preview"
 LITE_MODEL = "gemini-3.1-flash-lite-preview"
 SIMPLE_MODEL = "gemini-3-flash-preview"
 COMPLEX_MODEL = "gemini-3.1-pro-preview"
