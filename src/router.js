@@ -1,5 +1,5 @@
 // ================= 默认配置 =================
-const DEFAULT_SCORING_MODEL = "gemini-3.1-flash-lite-preview";
+const DEFAULT_SCORING_MODEL = "gemma-4-31b-it";
 const DEFAULT_LITE_MODEL = "gemini-3.1-flash-lite-preview";
 const DEFAULT_SIMPLE_MODEL = "gemini-3-flash-preview";
 const DEFAULT_COMPLEX_MODEL = "gemini-3.1-pro-preview";
