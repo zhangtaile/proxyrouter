@@ -228,15 +228,26 @@ async function getComplexityScoreWithRaw(prompt, apiKey, scoringModel) {
   const payload = {
     systemInstruction: {
       parts: [{
-        text: "You are a routing assistant. Rate the complexity of the user's prompt on a scale of 1-100. Reply ONLY with a number."
+        text: "You are a routing assistant. Rate the complexity of the user's prompt on a scale of 1-100. Reply with a JSON object containing the score. Example: {\"score\": 15}"
       }]
     },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 1000, temperature: 0.1 }
+    generationConfig: { 
+      maxOutputTokens: 20, 
+      temperature: 0.1,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "object",
+        properties: {
+          score: { type: "integer" }
+        },
+        required: ["score"]
+      }
+    }
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000);
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
   try {
     const url = `${GEMINI_BASE_URL}/${scoringModel}:generateContent`;
@@ -256,16 +267,20 @@ async function getComplexityScoreWithRaw(prompt, apiKey, scoringModel) {
 
     const result = await response.json();
     const parts = result?.candidates?.[0]?.content?.parts || [];
+    const targetPart = parts.find(p => !p.thought) || parts[0];
+    const text = targetPart?.text?.trim() || "{}";
     
-    // 过滤掉 thought 部分，寻找包含实际回答的部分
-    const actualParts = parts.filter(p => !p.thought);
-    const targetPart = actualParts.length > 0 ? actualParts[actualParts.length - 1] : parts[0];
-    
-    const scoreStr = targetPart?.text?.trim() || "50";
-    const numMatch = scoreStr.match(/\d+/);
-    const score = numMatch ? Math.max(1, Math.min(100, parseInt(numMatch[0], 10))) : 50;
-    
-    return { score, raw: scoreStr };
+    let score = 50;
+    try {
+      const parsed = JSON.parse(text);
+      score = typeof parsed.score === 'number' ? parsed.score : 50;
+    } catch (e) {
+      // 回退到正则匹配
+      const numMatch = text.match(/\d+/);
+      score = numMatch ? parseInt(numMatch[0], 10) : 50;
+    }
+
+    return { score: Math.max(1, Math.min(100, score)), raw: text };
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.message.startsWith("AUTH_FAILED:")) throw err;
