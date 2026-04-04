@@ -232,7 +232,7 @@ async function getComplexityScoreWithRaw(prompt, apiKey, scoringModel) {
       }]
     },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 20, temperature: 0.1 }
+    generationConfig: { maxOutputTokens: 1000, temperature: 0.1 }
   };
 
   const controller = new AbortController();
@@ -255,9 +255,16 @@ async function getComplexityScoreWithRaw(prompt, apiKey, scoringModel) {
     }
 
     const result = await response.json();
-    const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "50";
+    const parts = result?.candidates?.[0]?.content?.parts || [];
+    
+    // 过滤掉 thought 部分，寻找包含实际回答的部分
+    const actualParts = parts.filter(p => !p.thought);
+    const targetPart = actualParts.length > 0 ? actualParts[actualParts.length - 1] : parts[0];
+    
+    const scoreStr = targetPart?.text?.trim() || "50";
     const numMatch = scoreStr.match(/\d+/);
     const score = numMatch ? Math.max(1, Math.min(100, parseInt(numMatch[0], 10))) : 50;
+    
     return { score, raw: scoreStr };
   } catch (err) {
     clearTimeout(timeoutId);
