@@ -193,12 +193,15 @@ export async function handleRequest(request, env = {}) {
   const targetUrl = new URL(`${GEMINI_BASE_URL}/${targetModel}:${action}`);
   url.searchParams.forEach((value, key) => targetUrl.searchParams.append(key, value));
 
+  const newHeaders = new Headers(request.headers);
+  newHeaders.set("x-goog-api-key", apiKey);
+  newHeaders.set("Content-Type", "application/json");
+  newHeaders.delete("host"); // 防止 Host 头冲突
+  if (AUTH_TOKEN) newHeaders.delete("authorization"); // 移除代理自身的鉴权头
+
   const targetRequest = new Request(targetUrl.toString(), {
     method: "POST",
-    headers: {
-      "x-goog-api-key": apiKey,
-      "Content-Type": "application/json",
-    },
+    headers: newHeaders,
     body: JSON.stringify(body),
   });
 
