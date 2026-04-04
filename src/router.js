@@ -134,10 +134,16 @@ export async function handleRequest(request, env = {}) {
     return `${c.role || "user"}: ${text}`;
   }).join("\n");
 
+  console.log(`[DEBUG] Recent Context: ${recentContext}`);
+  console.log(`[DEBUG] Has Multimodal: ${hasMultimodal}`);
+
   // 6. 获取复杂度评分
   let score;
+  let rawScoreResponse = "";
   try {
-    score = await getComplexityScore(recentContext, apiKey, SCORING_MODEL);
+    const result = await getComplexityScoreWithRaw(recentContext, apiKey, SCORING_MODEL);
+    score = result.score;
+    rawScoreResponse = result.raw;
   } catch (err) {
     if (err.message.startsWith("AUTH_FAILED:")) {
       const status = parseInt(err.message.split(":")[1], 10);
@@ -147,9 +153,16 @@ export async function handleRequest(request, env = {}) {
       });
     }
     score = 50;
+    rawScoreResponse = "Error: " + err.message;
   }
 
-  if (hasMultimodal && score < 40) score = 40;
+  console.log(`[DEBUG] Raw Score Response: ${rawScoreResponse}`);
+
+  const originalScore = score;
+  if (hasMultimodal && score < 40) {
+    score = 40;
+    console.log(`[DEBUG] Score adjusted for multimodal from ${originalScore} to ${score}`);
+  }
 
   // 7. 模型路由
   let targetModel = LITE_MODEL;
@@ -209,8 +222,8 @@ export async function handleRequest(request, env = {}) {
 }
 
 // --- 辅助函数：评估复杂度 ---
-async function getComplexityScore(prompt, apiKey, scoringModel) {
-  if (!prompt) return 30;
+async function getComplexityScoreWithRaw(prompt, apiKey, scoringModel) {
+  if (!prompt) return { score: 30, raw: "No prompt" };
 
   const payload = {
     systemInstruction: {
@@ -238,16 +251,17 @@ async function getComplexityScore(prompt, apiKey, scoringModel) {
 
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) throw new Error(`AUTH_FAILED:${response.status}`);
-      return 50;
+      return { score: 50, raw: `HTTP ${response.status}` };
     }
 
     const result = await response.json();
     const scoreStr = result?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "50";
     const numMatch = scoreStr.match(/\d+/);
-    return numMatch ? Math.max(1, Math.min(100, parseInt(numMatch[0], 10))) : 50;
+    const score = numMatch ? Math.max(1, Math.min(100, parseInt(numMatch[0], 10))) : 50;
+    return { score, raw: scoreStr };
   } catch (err) {
     clearTimeout(timeoutId);
     if (err.message.startsWith("AUTH_FAILED:")) throw err;
-    return 50;
+    return { score: 50, raw: "Error: " + err.message };
   }
 }
